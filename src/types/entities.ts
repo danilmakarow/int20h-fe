@@ -4,9 +4,9 @@ export interface User {
   first_name: string;
   last_name: string;
   email: string;
-  password_hash: string;
   is_active: boolean;
   has_subscription: boolean;
+  subscription_type: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,9 +57,11 @@ export interface Chat {
 }
 
 export interface ChatMessage {
+  id: string;
+  chat_id: string;
   role: 'user' | 'assistant';
   content: string;
-  timestamp?: string;
+  created_at: string;
 }
 
 export interface PriorityLevel {
@@ -86,7 +88,7 @@ export interface ActionRequest {
   id: number;
   chat_id: number;
   action_id: number;
-  is_approved: boolean;
+  is_approved: boolean | null;
   created_at: string;
   updated_at: string;
 }

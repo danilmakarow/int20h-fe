@@ -14,6 +14,10 @@ export interface SendMessageRequest {
   text: string;
 }
 
+export interface SendMessageResponse {
+  reply: string;
+}
+
 export interface GetChatResponse {
   data: Chat;
 }
@@ -21,10 +25,8 @@ export interface GetChatResponse {
 // Back office
 export interface ChatListItem {
   chat: Omit<Chat, 'chat_messages'>;
-  status: string;
-  report: ChatReport;
-  first_message: string;
-  user: User;
+  report: ChatReport | null;
+  first_message: string | null;
 }
 
 export interface GetChatsResponse {
@@ -33,8 +35,7 @@ export interface GetChatsResponse {
 
 export interface ChatDetailData {
   chat: Chat;
-  status: string;
-  report: ChatReport;
+  report: ChatReport | null;
   open_action: ActionRequest | null;
 }
 

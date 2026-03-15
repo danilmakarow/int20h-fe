@@ -26,7 +26,7 @@ const ChatMessageList = ({ messages }: ChatMessageListProps) => {
         const isUser = message.role === 'user';
         return (
           <Box
-            key={index}
+            key={message.id ?? index}
             sx={{
               display: 'flex',
               justifyContent: isUser ? 'flex-end' : 'flex-start',
@@ -56,9 +56,9 @@ const ChatMessageList = ({ messages }: ChatMessageListProps) => {
               <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
                 {message.content}
               </Typography>
-              {message.timestamp && (
+              {message.created_at && (
                 <Typography variant="caption" sx={{ opacity: 0.6, mt: 0.5, display: 'block' }}>
-                  {new Date(message.timestamp).toLocaleTimeString()}
+                  {new Date(message.created_at).toLocaleTimeString()}
                 </Typography>
               )}
             </Box>

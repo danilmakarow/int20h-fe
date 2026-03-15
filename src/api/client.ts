@@ -19,7 +19,7 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
 const get = <T>(path: string): Promise<T> => {
   return fetch(`${BASE_URL}${path}`, {
     method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' , "ngrok-skip-browser-warning": "true"},
   }).then(handleResponse<T>);
 };
 
@@ -27,7 +27,7 @@ const get = <T>(path: string): Promise<T> => {
 const post = <T>(path: string, body?: unknown): Promise<T> => {
   return fetch(`${BASE_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', "ngrok-skip-browser-warning": "true" },
     body: body ? JSON.stringify(body) : undefined,
   }).then(handleResponse<T>);
 };
@@ -36,7 +36,7 @@ const post = <T>(path: string, body?: unknown): Promise<T> => {
 const patch = <T>(path: string, body?: unknown): Promise<T> => {
   return fetch(`${BASE_URL}${path}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', "ngrok-skip-browser-warning": "true" },
     body: body ? JSON.stringify(body) : undefined,
   }).then(handleResponse<T>);
 };

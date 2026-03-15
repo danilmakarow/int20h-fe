@@ -23,37 +23,16 @@ import SearchRounded from '@mui/icons-material/SearchRounded';
 import { getChats, getTickets, getActionRequests, getUsers } from '@/api/backoffice.api';
 import type { ChatListItem } from '@/types/api';
 import type { Ticket, ActionRequest, User } from '@/types/entities';
+import {
+  STATUS_LABELS,
+  STATUS_COLORS,
+  PRIORITY_LABELS,
+  PRIORITY_COLORS,
+  getStatusName,
+} from '@/utils/chatStatus';
 
 type SortField = 'chat_id' | 'user_name' | 'priority' | 'status' | 'first_message' | 'issue_type';
 type SortDirection = 'asc' | 'desc';
-
-const STATUS_LABELS: Record<string, string> = {
-  open_support: 'Open — Support',
-  open_ai_agent: 'Open — AI Agent',
-  closed_support: 'Closed — Support',
-  closed_ai_agent: 'Closed — AI Agent',
-};
-
-const STATUS_COLORS: Record<string, 'warning' | 'info' | 'default' | 'success'> = {
-  open_support: 'warning',
-  open_ai_agent: 'info',
-  closed_support: 'default',
-  closed_ai_agent: 'success',
-};
-
-const PRIORITY_LABELS: Record<number, string> = {
-  1: 'Low',
-  2: 'Medium',
-  3: 'High',
-  4: 'Critical',
-};
-
-const PRIORITY_COLORS: Record<number, 'default' | 'info' | 'warning' | 'error'> = {
-  1: 'default',
-  2: 'info',
-  3: 'warning',
-  4: 'error',
-};
 
 /** Extract issue type from report data */
 const getIssueType = (item: ChatListItem): string => {
@@ -65,11 +44,13 @@ const getIssueType = (item: ChatListItem): string => {
   return '—';
 };
 
-/** Get user display name */
-const getUserName = (item: ChatListItem): string => {
-  if (!item.user) return '—';
-  const fullName = `${item.user.first_name} ${item.user.last_name}`.trim();
-  return fullName || item.user.username || '—';
+/** Get user display name from users map */
+const getUserName = (userId: number | null, usersMap: Map<number, User>): string => {
+  if (!userId) return '—';
+  const user = usersMap.get(userId);
+  if (!user) return `User #${userId}`;
+  const fullName = `${user.first_name} ${user.last_name}`.trim();
+  return fullName || user.username || '—';
 };
 
 /** Format a date string as relative time (e.g. "3 days ago") */
@@ -113,6 +94,12 @@ const DashboardPage = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoadingPanels, setIsLoadingPanels] = useState(true);
 
+  const usersMap = useMemo(() => {
+    const map = new Map<number, User>();
+    users.forEach((user) => map.set(user.user_id, user));
+    return map;
+  }, [users]);
+
   const fetchAll = useCallback(async () => {
     setIsLoadingChats(true);
     setIsLoadingPanels(true);
@@ -150,12 +137,13 @@ const DashboardPage = () => {
   };
 
   const getSortValue = (item: ChatListItem, field: SortField): string | number => {
+    const statusName = getStatusName(item.chat.chat_status_id);
     switch (field) {
       case 'chat_id': return item.chat.chat_id;
-      case 'user_name': return getUserName(item).toLowerCase();
+      case 'user_name': return getUserName(item.chat.user_id, usersMap).toLowerCase();
       case 'priority': return item.chat.priority_level_id;
-      case 'status': return item.status;
-      case 'first_message': return item.first_message.toLowerCase();
+      case 'status': return statusName;
+      case 'first_message': return (item.first_message ?? '').toLowerCase();
       case 'issue_type': return getIssueType(item).toLowerCase();
     }
   };
@@ -164,14 +152,14 @@ const DashboardPage = () => {
     let result = chats;
 
     if (statusFilter) {
-      result = result.filter((item) => item.status === statusFilter);
+      result = result.filter((item) => getStatusName(item.chat.chat_status_id) === statusFilter);
     }
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((item) => {
-        const userName = getUserName(item).toLowerCase();
-        const firstMessage = item.first_message.toLowerCase();
+        const userName = getUserName(item.chat.user_id, usersMap).toLowerCase();
+        const firstMessage = (item.first_message ?? '').toLowerCase();
         const issueType = getIssueType(item).toLowerCase();
         const chatId = String(item.chat.chat_id);
         return userName.includes(query) || firstMessage.includes(query) || issueType.includes(query) || chatId.includes(query);
@@ -184,7 +172,7 @@ const DashboardPage = () => {
       const comparison = valueA < valueB ? -1 : valueA > valueB ? 1 : 0;
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [chats, statusFilter, searchQuery, sortField, sortDirection]);
+  }, [chats, statusFilter, searchQuery, sortField, sortDirection, usersMap]);
 
   /** Find the latest chat for a user and return relative time */
   const getLastRequest = (user: User): string => {
@@ -198,7 +186,6 @@ const DashboardPage = () => {
 
   /** Find the action name by action_id */
   const getActionName = (actionId: number): string => {
-    // We don't have actions loaded here, so just show the ID
     return `Action #${actionId}`;
   };
 
@@ -292,36 +279,39 @@ const DashboardPage = () => {
               ))}
 
             {!isLoadingChats &&
-              filteredAndSorted.map((item) => (
-                <TableRow
-                  key={item.chat.chat_id}
-                  hover
-                  sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }}
-                  onClick={() => navigate(`/bo/chat/${item.chat.chat_id}`)}
-                >
-                  <TableCell>#{item.chat.chat_id}</TableCell>
-                  <TableCell>{getUserName(item)}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={PRIORITY_LABELS[item.chat.priority_level_id] ?? `P${item.chat.priority_level_id}`}
-                      size="small"
-                      color={PRIORITY_COLORS[item.chat.priority_level_id] ?? 'default'}
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={STATUS_LABELS[item.status] ?? item.status}
-                      size="small"
-                      color={STATUS_COLORS[item.status] ?? 'default'}
-                    />
-                  </TableCell>
-                  <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.first_message}
-                  </TableCell>
-                  <TableCell>{getIssueType(item)}</TableCell>
-                </TableRow>
-              ))}
+              filteredAndSorted.map((item) => {
+                const statusName = getStatusName(item.chat.chat_status_id);
+                return (
+                  <TableRow
+                    key={item.chat.chat_id}
+                    hover
+                    sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }}
+                    onClick={() => navigate(`/bo/chat/${item.chat.chat_id}`)}
+                  >
+                    <TableCell>#{item.chat.chat_id}</TableCell>
+                    <TableCell>{getUserName(item.chat.user_id, usersMap)}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={PRIORITY_LABELS[item.chat.priority_level_id] ?? `P${item.chat.priority_level_id}`}
+                        size="small"
+                        color={PRIORITY_COLORS[item.chat.priority_level_id] ?? 'default'}
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={STATUS_LABELS[statusName] ?? statusName}
+                        size="small"
+                        color={STATUS_COLORS[statusName] ?? 'default'}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.first_message ?? '—'}
+                    </TableCell>
+                    <TableCell>{getIssueType(item)}</TableCell>
+                  </TableRow>
+                );
+              })}
 
             {!isLoadingChats && filteredAndSorted.length === 0 && (
               <TableRow>
@@ -404,9 +394,9 @@ const DashboardPage = () => {
                     slotProps={{ primary: { variant: 'body2', fontWeight: 500 }, secondary: { variant: 'caption' } }}
                   />
                   <Chip
-                    label={request.is_approved ? 'Approved' : 'Pending'}
+                    label={request.is_approved === true ? 'Approved' : request.is_approved === false ? 'Rejected' : 'Pending'}
                     size="small"
-                    color={request.is_approved ? 'success' : 'warning'}
+                    color={request.is_approved === true ? 'success' : request.is_approved === false ? 'error' : 'warning'}
                     variant="outlined"
                   />
                 </ListItem>

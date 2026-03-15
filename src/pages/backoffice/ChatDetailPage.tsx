@@ -16,20 +16,7 @@ import ChatMessageList from '@/components/ChatMessageList';
 import ChatInput from '@/components/ChatInput';
 import { getChatDetail, patchActionRequest, escalateChat } from '@/api/backoffice.api';
 import type { ChatDetailData } from '@/types/api';
-
-const STATUS_LABELS: Record<string, string> = {
-  open_support: 'Open — Support',
-  open_ai_agent: 'Open — AI Agent',
-  closed_support: 'Closed — Support',
-  closed_ai_agent: 'Closed — AI Agent',
-};
-
-const STATUS_COLORS: Record<string, 'warning' | 'info' | 'default' | 'success'> = {
-  open_support: 'warning',
-  open_ai_agent: 'info',
-  closed_support: 'default',
-  closed_ai_agent: 'success',
-};
+import { STATUS_LABELS, STATUS_COLORS, getStatusName } from '@/utils/chatStatus';
 
 /** Chat detail page — full height, conversation + right sidebar with status, actions, report */
 const ChatDetailPage = () => {
@@ -113,6 +100,8 @@ const ChatDetailPage = () => {
     return <Alert severity="error">{error ?? 'Chat not found'}</Alert>;
   }
 
+  const statusName = getStatusName(detail.chat.chat_status_id);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       {/* Header */}
@@ -162,7 +151,7 @@ const ChatDetailPage = () => {
               variant="outlined"
               color="error"
               onClick={handleStopAiAgent}
-              disabled={isStopping || detail.status === 'open_support' || detail.status === 'closed_support'}
+              disabled={isStopping || statusName === 'open_support' || statusName === 'closed_support'}
               startIcon={<StopCircleRounded />}
               sx={{ height: 48, whiteSpace: 'nowrap', flexShrink: 0 }}
             >
@@ -179,8 +168,8 @@ const ChatDetailPage = () => {
               Status
             </Typography>
             <Chip
-              label={STATUS_LABELS[detail.status] ?? detail.status}
-              color={STATUS_COLORS[detail.status] ?? 'default'}
+              label={STATUS_LABELS[statusName] ?? statusName}
+              color={STATUS_COLORS[statusName] ?? 'default'}
               size="medium"
             />
           </Paper>

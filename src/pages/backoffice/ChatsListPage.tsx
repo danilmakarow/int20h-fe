@@ -17,39 +17,19 @@ import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
 import SearchRounded from '@mui/icons-material/SearchRounded';
-import { getChats } from '@/api/backoffice.api';
+import { getChats, getUsers } from '@/api/backoffice.api';
 import type { ChatListItem } from '@/types/api';
+import type { User } from '@/types/entities';
+import {
+  STATUS_LABELS,
+  STATUS_COLORS,
+  PRIORITY_LABELS,
+  PRIORITY_COLORS,
+  getStatusName,
+} from '@/utils/chatStatus';
 
 type SortField = 'chat_id' | 'user_name' | 'priority' | 'status' | 'first_message' | 'issue_type';
 type SortDirection = 'asc' | 'desc';
-
-const STATUS_LABELS: Record<string, string> = {
-  open_support: 'Open — Support',
-  open_ai_agent: 'Open — AI Agent',
-  closed_support: 'Closed — Support',
-  closed_ai_agent: 'Closed — AI Agent',
-};
-
-const STATUS_COLORS: Record<string, 'warning' | 'info' | 'default' | 'success'> = {
-  open_support: 'warning',
-  open_ai_agent: 'info',
-  closed_support: 'default',
-  closed_ai_agent: 'success',
-};
-
-const PRIORITY_LABELS: Record<number, string> = {
-  1: 'Low',
-  2: 'Medium',
-  3: 'High',
-  4: 'Critical',
-};
-
-const PRIORITY_COLORS: Record<number, 'default' | 'info' | 'warning' | 'error'> = {
-  1: 'default',
-  2: 'info',
-  3: 'warning',
-  4: 'error',
-};
 
 /** Extract issue type from report data */
 const getIssueType = (item: ChatListItem): string => {
@@ -61,11 +41,13 @@ const getIssueType = (item: ChatListItem): string => {
   return '—';
 };
 
-/** Get user display name */
-const getUserName = (item: ChatListItem): string => {
-  if (!item.user) return '—';
-  const fullName = `${item.user.first_name} ${item.user.last_name}`.trim();
-  return fullName || item.user.username || '—';
+/** Get user display name from users map */
+const getUserName = (userId: number | null, usersMap: Map<number, User>): string => {
+  if (!userId) return '—';
+  const user = usersMap.get(userId);
+  if (!user) return `User #${userId}`;
+  const fullName = `${user.first_name} ${user.last_name}`.trim();
+  return fullName || user.username || '—';
 };
 
 const SKELETON_ROWS = 6;
@@ -75,6 +57,7 @@ const COLUMN_COUNT = 6;
 const ChatsListPage = () => {
   const navigate = useNavigate();
   const [chats, setChats] = useState<ChatListItem[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,12 +69,19 @@ const ChatsListPage = () => {
   const [sortField, setSortField] = useState<SortField>('chat_id');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  const fetchChats = useCallback(async () => {
+  const usersMap = useMemo(() => {
+    const map = new Map<number, User>();
+    users.forEach((user) => map.set(user.user_id, user));
+    return map;
+  }, [users]);
+
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await getChats();
-      setChats(response.data);
+      const [chatsRes, usersRes] = await Promise.all([getChats(), getUsers()]);
+      setChats(chatsRes.data);
+      setUsers(usersRes.data);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load chats');
     } finally {
@@ -100,8 +90,8 @@ const ChatsListPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchChats();
-  }, [fetchChats]);
+    fetchData();
+  }, [fetchData]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -114,17 +104,18 @@ const ChatsListPage = () => {
 
   /** Get sortable value for a given field */
   const getSortValue = (item: ChatListItem, field: SortField): string | number => {
+    const statusName = getStatusName(item.chat.chat_status_id);
     switch (field) {
       case 'chat_id':
         return item.chat.chat_id;
       case 'user_name':
-        return getUserName(item).toLowerCase();
+        return getUserName(item.chat.user_id, usersMap).toLowerCase();
       case 'priority':
         return item.chat.priority_level_id;
       case 'status':
-        return item.status;
+        return statusName;
       case 'first_message':
-        return item.first_message.toLowerCase();
+        return (item.first_message ?? '').toLowerCase();
       case 'issue_type':
         return getIssueType(item).toLowerCase();
     }
@@ -135,15 +126,15 @@ const ChatsListPage = () => {
 
     // Filter by status
     if (statusFilter) {
-      result = result.filter((item) => item.status === statusFilter);
+      result = result.filter((item) => getStatusName(item.chat.chat_status_id) === statusFilter);
     }
 
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((item) => {
-        const userName = getUserName(item).toLowerCase();
-        const firstMessage = item.first_message.toLowerCase();
+        const userName = getUserName(item.chat.user_id, usersMap).toLowerCase();
+        const firstMessage = (item.first_message ?? '').toLowerCase();
         const issueType = getIssueType(item).toLowerCase();
         const chatId = String(item.chat.chat_id);
         return (
@@ -164,7 +155,7 @@ const ChatsListPage = () => {
     });
 
     return result;
-  }, [chats, statusFilter, searchQuery, sortField, sortDirection]);
+  }, [chats, statusFilter, searchQuery, sortField, sortDirection, usersMap]);
 
   const renderSortableHeader = (field: SortField, label: string) => (
     <TableSortLabel
@@ -249,43 +240,46 @@ const ChatsListPage = () => {
               ))}
 
             {!isLoading &&
-              filteredAndSorted.map((item) => (
-                <TableRow
-                  key={item.chat.chat_id}
-                  hover
-                  sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }}
-                  onClick={() => navigate(`/bo/chat/${item.chat.chat_id}`)}
-                >
-                  <TableCell>#{item.chat.chat_id}</TableCell>
-                  <TableCell>{getUserName(item)}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={PRIORITY_LABELS[item.chat.priority_level_id] ?? `P${item.chat.priority_level_id}`}
-                      size="small"
-                      color={PRIORITY_COLORS[item.chat.priority_level_id] ?? 'default'}
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={STATUS_LABELS[item.status] ?? item.status}
-                      size="small"
-                      color={STATUS_COLORS[item.status] ?? 'default'}
-                    />
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      maxWidth: 300,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
+              filteredAndSorted.map((item) => {
+                const statusName = getStatusName(item.chat.chat_status_id);
+                return (
+                  <TableRow
+                    key={item.chat.chat_id}
+                    hover
+                    sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }}
+                    onClick={() => navigate(`/bo/chat/${item.chat.chat_id}`)}
                   >
-                    {item.first_message}
-                  </TableCell>
-                  <TableCell>{getIssueType(item)}</TableCell>
-                </TableRow>
-              ))}
+                    <TableCell>#{item.chat.chat_id}</TableCell>
+                    <TableCell>{getUserName(item.chat.user_id, usersMap)}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={PRIORITY_LABELS[item.chat.priority_level_id] ?? `P${item.chat.priority_level_id}`}
+                        size="small"
+                        color={PRIORITY_COLORS[item.chat.priority_level_id] ?? 'default'}
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={STATUS_LABELS[statusName] ?? statusName}
+                        size="small"
+                        color={STATUS_COLORS[statusName] ?? 'default'}
+                      />
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        maxWidth: 300,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.first_message ?? '—'}
+                    </TableCell>
+                    <TableCell>{getIssueType(item)}</TableCell>
+                  </TableRow>
+                );
+              })}
 
             {!isLoading && filteredAndSorted.length === 0 && (
               <TableRow>

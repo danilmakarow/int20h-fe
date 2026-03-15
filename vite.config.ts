@@ -9,13 +9,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        rewrite: (requestPath) => requestPath.replace(/^\/api/, ''),
-      },
-    },
-  },
+  // server: {
+    // proxy: {
+    //   '/api': {
+    //     target: 'https://briana-stereotomical-unslimly.ngrok-free.dev/',
+    //     changeOrigin: true,
+    //     rewrite: (requestPath) => requestPath.replace(/^\/api/, ''),
+    //   },
+    // },
+  // },
 });
