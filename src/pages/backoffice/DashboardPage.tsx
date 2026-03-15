@@ -20,9 +20,9 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import SearchRounded from '@mui/icons-material/SearchRounded';
-import { getChats, getTickets, getActionRequests, getUsers } from '@/api/backoffice.api';
+import { getChats, getTickets, getActionRequests, getUsers, getActions } from '@/api/backoffice.api';
 import type { ChatListItem } from '@/types/api';
-import type { Ticket, ActionRequest, User } from '@/types/entities';
+import type { Action, Ticket, ActionRequest, User } from '@/types/entities';
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -31,18 +31,8 @@ import {
   getStatusName,
 } from '@/utils/chatStatus';
 
-type SortField = 'chat_id' | 'user_name' | 'priority' | 'status' | 'first_message' | 'issue_type';
+type SortField = 'chat_id' | 'user_name' | 'priority' | 'status' | 'first_message';
 type SortDirection = 'asc' | 'desc';
-
-/** Extract issue type from report data */
-const getIssueType = (item: ChatListItem): string => {
-  if (!item.report?.report_data) return '—';
-  const data = item.report.report_data;
-  if (typeof data === 'object' && 'issue_type' in data && typeof data.issue_type === 'string') {
-    return data.issue_type;
-  }
-  return '—';
-};
 
 /** Get user display name from users map */
 const getUserName = (userId: number | null, usersMap: Map<number, User>): string => {
@@ -73,7 +63,7 @@ const formatTimeAgo = (dateString: string): string => {
 };
 
 const SKELETON_ROWS = 5;
-const COLUMN_COUNT = 6;
+const COLUMN_COUNT = 5;
 
 /** Dashboard page — full viewport, no page scroll, internal sections scroll */
 const DashboardPage = () => {
@@ -91,8 +81,15 @@ const DashboardPage = () => {
   // Bottom panels
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [actionRequests, setActionRequests] = useState<ActionRequest[]>([]);
+  const [actions, setActions] = useState<Action[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoadingPanels, setIsLoadingPanels] = useState(true);
+
+  const actionsMap = useMemo(() => {
+    const map = new Map<number, Action>();
+    actions.forEach((action) => map.set(action.action_id, action));
+    return map;
+  }, [actions]);
 
   const usersMap = useMemo(() => {
     const map = new Map<number, User>();
@@ -105,16 +102,18 @@ const DashboardPage = () => {
     setIsLoadingPanels(true);
     setError(null);
     try {
-      const [chatsRes, ticketsRes, actionReqRes, usersRes] = await Promise.all([
+      const [chatsRes, ticketsRes, actionReqRes, usersRes, actionsRes] = await Promise.all([
         getChats(),
         getTickets(),
         getActionRequests(),
         getUsers(),
+        getActions(),
       ]);
       setChats(chatsRes.data);
       setTickets(ticketsRes.data);
       setActionRequests(actionReqRes.data);
       setUsers(usersRes.data);
+      setActions(actionsRes.data);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load dashboard data');
     } finally {
@@ -144,7 +143,6 @@ const DashboardPage = () => {
       case 'priority': return item.chat.priority_level_id;
       case 'status': return statusName;
       case 'first_message': return (item.first_message ?? '').toLowerCase();
-      case 'issue_type': return getIssueType(item).toLowerCase();
     }
   };
 
@@ -160,9 +158,8 @@ const DashboardPage = () => {
       result = result.filter((item) => {
         const userName = getUserName(item.chat.user_id, usersMap).toLowerCase();
         const firstMessage = (item.first_message ?? '').toLowerCase();
-        const issueType = getIssueType(item).toLowerCase();
         const chatId = String(item.chat.chat_id);
-        return userName.includes(query) || firstMessage.includes(query) || issueType.includes(query) || chatId.includes(query);
+        return userName.includes(query) || firstMessage.includes(query) || chatId.includes(query);
       });
     }
 
@@ -184,9 +181,10 @@ const DashboardPage = () => {
     return formatTimeAgo(userChats[0].chat.updated_at);
   };
 
-  /** Find the action name by action_id */
-  const getActionName = (actionId: number): string => {
-    return `Action #${actionId}`;
+  /** Get action description by action_id */
+  const getActionDescription = (actionId: number): string => {
+    const action = actionsMap.get(actionId);
+    return action?.action_description ?? `Action #${actionId}`;
   };
 
   const renderSortableHeader = (field: SortField, label: string) => (
@@ -263,7 +261,6 @@ const DashboardPage = () => {
               <TableCell sx={{ fontWeight: 600 }}>{renderSortableHeader('priority', 'Priority')}</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>{renderSortableHeader('status', 'Status')}</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>{renderSortableHeader('first_message', 'First Message')}</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>{renderSortableHeader('issue_type', 'Issue Type')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -308,7 +305,6 @@ const DashboardPage = () => {
                     <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {item.first_message ?? '—'}
                     </TableCell>
-                    <TableCell>{getIssueType(item)}</TableCell>
                   </TableRow>
                 );
               })}
@@ -389,7 +385,7 @@ const DashboardPage = () => {
                   onClick={() => navigate(`/bo/chat/${request.chat_id}`)}
                 >
                   <ListItemText
-                    primary={getActionName(request.action_id)}
+                    primary={getActionDescription(request.action_id)}
                     secondary={`Chat #${request.chat_id}`}
                     slotProps={{ primary: { variant: 'body2', fontWeight: 500 }, secondary: { variant: 'caption' } }}
                   />

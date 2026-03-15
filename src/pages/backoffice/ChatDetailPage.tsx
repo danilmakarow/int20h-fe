@@ -14,8 +14,9 @@ import CloseRounded from '@mui/icons-material/CloseRounded';
 import StopCircleRounded from '@mui/icons-material/StopCircleRounded';
 import ChatMessageList from '@/components/ChatMessageList';
 import ChatInput from '@/components/ChatInput';
-import { getChatDetail, patchActionRequest, escalateChat } from '@/api/backoffice.api';
+import { getChatDetail, patchActionRequest, escalateChat, getActions } from '@/api/backoffice.api';
 import type { ChatDetailData } from '@/types/api';
+import type { Action, ChatMessage } from '@/types/entities';
 import { STATUS_LABELS, STATUS_COLORS, getStatusName } from '@/utils/chatStatus';
 
 /** Chat detail page — full height, conversation + right sidebar with status, actions, report */
@@ -31,13 +32,19 @@ const ChatDetailPage = () => {
   const [isSending, setIsSending] = useState(false);
   const [isActioning, setIsActioning] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
+  const [actionsMap, setActionsMap] = useState<Map<number, Action>>(new Map());
 
   const fetchDetail = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await getChatDetail(chatId);
+      const [response, actionsRes] = await Promise.all([getChatDetail(chatId), getActions()]);
       setDetail(response.data);
+      setOptimisticMessages([]);
       setError(null);
+      const map = new Map<number, Action>();
+      actionsRes.data.forEach((action) => map.set(action.action_id, action));
+      setActionsMap(map);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Failed to load chat');
     } finally {
@@ -51,12 +58,23 @@ const ChatDetailPage = () => {
 
   /** CS manager sends a reply — this also escalates to human */
   const handleSendMessage = async (text: string) => {
+    const optimisticMessage: ChatMessage = {
+      id: `optimistic-${Date.now()}`,
+      chat_id: String(chatId),
+      role: 'assistant',
+      content: text,
+      created_at: new Date().toISOString(),
+    };
+
+    setOptimisticMessages([optimisticMessage]);
     setIsSending(true);
     try {
       await escalateChat(chatId, { escalate_to_human: true, message: text });
       await fetchDetail();
     } catch {
-      setError('Failed to send message');
+      await fetchDetail();
+      setOptimisticMessages([]);
+      // setError('Failed to send message');
     } finally {
       setIsSending(false);
     }
@@ -134,7 +152,14 @@ const ChatDetailPage = () => {
             }}
           >
             <Box sx={{ flex: 1, overflowY: 'auto', px: 3, py: 1 }}>
-              <ChatMessageList messages={detail.chat.chat_messages} />
+              <ChatMessageList
+                messages={
+                  optimisticMessages.length > 0
+                    ? [...(detail.chat.chat_messages ?? []), ...optimisticMessages]
+                    : detail.chat.chat_messages
+                }
+                invertSides
+              />
             </Box>
           </Paper>
 
@@ -208,7 +233,7 @@ const ChatDetailPage = () => {
                 Pending Action Request
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                Action ID: {detail.open_action.action_id}
+                {actionsMap.get(detail.open_action.action_id)?.action_description ?? `Action #${detail.open_action.action_id}`}
               </Typography>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button

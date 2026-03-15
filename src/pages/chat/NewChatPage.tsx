@@ -18,7 +18,7 @@ const NewChatPage = () => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
-  const [email, setEmail] = useState('demo@example.com');
+  const [email, setEmail] = useState('bob@example.com');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +32,7 @@ const NewChatPage = () => {
 
     try {
       const response = await createChat({ email, text: trimmedMessage });
-      navigate(`/chat/${response.chat.chat_id}`);
+      navigate(`/chat/${response.chat.chat_id}`, { state: { initialMessage: trimmedMessage } });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Failed to create chat');
       setIsSubmitting(false);
